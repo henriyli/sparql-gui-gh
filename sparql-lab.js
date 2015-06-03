@@ -4,10 +4,17 @@
  derived from an example at https://gist.github.com/LaurensRietveld/eebde750f87c52cdfa58
  */
 
-"use strict"
+"use strict";
+
+var $ = require('jquery');
+var YASQE = require('./yasqe.bundled.min.js');
+var YASR = require('./yasr.bundled.min.js');
+var SparqlParser = require('sparqljs').Parser;
+var parser = new SparqlParser();
+var SparqlGenerator = require('sparqljs').Generator;
+var generator = new SparqlGenerator();
 
 var consumeUrl = function(yasqe, args) {
-
   // change endpoint value if there is any
   if (args.endpoint) {
     yasqe.options.sparql.endpoint = args.endpoint;
@@ -54,30 +61,19 @@ var consumeUrl = function(yasqe, args) {
       var query = atob(data.content);
       // q+d versionHistorySet value replacement (must be first value parameter)
       var re;
-      if (args.versionHistoryGraph) {
-        re = new RegExp("(values\\s+\\(\\s+\\?versionHistoryGraph.*?\\s+\\)\\s+\\{\\s+\\(\\s+<)\\S+(>.*?\\s+\\)\\s+\\})", "i");
-        query = query.replace(re, "$1" + args.versionHistoryGraph + "$2");
-      }
-      // q+d language value replacement (must be last value parameter)
-      if (args.language) {
-        re = new RegExp("(values\\s+\\(\\s+.*?\\?language\\s+\\)\\s+\\{\\s+\\(\\s+.*?\")\\w\\w(\"\\s+\\)\\s+\\})", "i");
-        query = query.replace(re, "$1" + args.language + "$2");
-      }
-      // q+d oldVersion and newVersion value replacement (must be
-      // adjacent value parameters, " undef undef " by default)
-      if (args.oldVersion && args.newVersion) {
-        re = new RegExp("(values\\s+\\(\\s+.*?\\?oldVersion\\s+\\?newVersion\\s+.*?\\)\\s+\\{\\s+\\(\\s+.*?\\s+)undef undef(.*?\\s+\\)\\s+\\})", "i");
-        query = query.replace(re, "$1" + " \"" + args.oldVersion + "\" \"" + args.newVersion + "\" " + "$2");
-        if (document.getElementById("new_version")) {
-          document.getElementById("new_version").innerHTML = "v " + args.newVersion;
+      var parsedQuery = parser.parse(query);
+      var vals = parsedQuery.where[0].values[0];
+      for (var param in args) {
+        // if the variable is found in the template
+        if (Object.keys(vals).indexOf('?'+param) !== -1) {
+          // "" wrapping all variables that were either undefined or literals in the template
+          if (vals['?'+param] === undefined || vals['?'+param].charAt(0) === '"')
+            vals['?'+param] = '"' + args[param] + '"';
+          else
+            vals['?'+param] = args[param];
         }
       }
-      // q+d conceptType value replacement
-      // (zbwext:Descriptor by default)
-      if (args.conceptType) {
-        re = new RegExp("(values\\s+\\(\\s+.*?\\?conceptType\\s+.*?\\)\\s+\\{\\s+\\(\\s+.*?\\s+)zbwext:Descriptor(.*?\\s+\\)\\s+\\})", "i");
-        query = query.replace(re, "$1" + args.conceptType + "$2");
-      }
+      query = generator.stringify(parsedQuery);
       yasqe.setValue(query);
       yasqe.query();
     });
@@ -122,6 +118,6 @@ var yasr = YASR(document.getElementById("yasr"), {
  
 // link yasqe and yasr together
 yasqe.options.sparql.callbacks.complete = function() {
-  window.yasr.setResponse.apply(this, arguments);
+  yasr.setResponse.apply(this, arguments);
   document.getElementById('results').scrollIntoView()
 }
